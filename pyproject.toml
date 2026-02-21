@@ -1,0 +1,19 @@
+[project]
+name = "types-opencv-python"
+version = "1.0.7"
+description = "This is an OpenCV stubs project."
+readme = "README.md"
+dependencies = [
+    "opencv-python>=4.13.0"
+]
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["cv2*"]
+
+[tool.setuptools.package-data]
+cv2 = ["**/*.pyi","py.typed"]
