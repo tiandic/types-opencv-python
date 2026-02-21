@@ -810,7 +810,7 @@ def addNoknownType(outPath):
                     t=cvtCXXToPYtype(Krettypes[i])
                     if t=="typing.Any":
                         t=getretType2(Krettypes[i])
-                    if t=="typing.Any" and isclassFromxml(i[0].upper()+i[1:],TxmlDirPath):
+                    if t=="typing.Any" and isclassFromxml(i[0].upper()+i[1:]):
                         t=i[0].upper()+i[1:]
 
                     text=f"{i}={t}"
