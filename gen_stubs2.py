@@ -13,8 +13,6 @@ from lxml import etree
 from pyflakes.api import checkPath
 from pyflakes.reporter import Reporter
 
-sys.setrecursionlimit(10**6)
-
 TxmlDirPath="."
 scriptDIR=os.path.dirname(os.path.abspath(__file__))
 inheritRecordFilePath=f"{time.time()}_inherit.json"
