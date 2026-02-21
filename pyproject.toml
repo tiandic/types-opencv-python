@@ -1,8 +1,8 @@
 [project]
 name = "types-opencv-python"
-version = "1.0.7"
+version = "1.0.8"
 description = "This is an OpenCV stubs project."
-readme = "README.md"
+readme = "pypi_README.md"
 dependencies = [
     "opencv-python>=4.13.0"
 ]
