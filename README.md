@@ -8,7 +8,7 @@ Because the generated stubs are based on the OpenCV documentation, all classes, 
 
 However, there are still shortcomings, the main one being the type hints for function return values.
 
-This is due to the large number of placeholder 'retval's in the Python section of the OpenCV documentation.
+This is due to the large number of placeholder types `retval` in the Python sections of the OpenCV documentation.
 
 `patch.json` is my patch for this issue, but since the project is still in its early stages, there may be imperfections. Feedback through [issues](https://github.com/tiandic/types-opencv-python/issues) is welcome to help further improve the project.
 
