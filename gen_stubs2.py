@@ -87,7 +87,7 @@ def isExist(name):
     except:
         return False
 
-def finddocfilefromxml(cppname,indexPath):
+def finddocfilefromxml(cppname):
     root=indexxmlRoot
     nameIndex=cppname.rfind("::")
     classname=cppname[:nameIndex]
@@ -148,8 +148,7 @@ def getFuncInfos(cppname,xmlDirPath):
             {...}
         ]
     """
-    indexPath=os.path.join(xmlDirPath,"index.xml")
-    refids=finddocfilefromxml(cppname,indexPath)
+    refids=finddocfilefromxml(cppname)
     retOverLoad=False
 
     if refids==None:
@@ -165,7 +164,8 @@ def getFuncInfos(cppname,xmlDirPath):
                 "argInfo":{}
                 }
         targetXmlFilePath=os.path.join(xmlDirPath,refid[:refid.rfind("_")])+".xml"
-        root=indexxmlRoot
+        tree=etree.parse(targetXmlFilePath)
+        root=tree.getroot()
 
         memberdefs=root.xpath(f"compounddef/sectiondef/memberdef[@id='{refid}' and @prot='public']")
         if memberdefs==[]:
