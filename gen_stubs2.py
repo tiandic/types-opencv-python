@@ -711,9 +711,9 @@ def sortclass(newdclass):
     neednext=True
     while neednext:
         neednext=False
-        for n in range(len(newdclass2)):
+        for n,item in enumerate(newdclass2):
             l={"classl":-1,"baseClassl":-1}
-            if newdclass2[n]["classl"]!=[]:
+            if item["classl"]!=[]:
                 l["classl"]=n
             if newdclass2[n]["baseClassl"]!=[]:
                 l["baseClassl"]=n
@@ -844,8 +844,7 @@ def getBaseClasss(classname):
 
 def addMoreInfoTonewd(newd):
     newd2=newd
-    for n in range(len(newd)):
-        node=newd2[n]
+    for n,node in enumerate(newd):
         filePath,classl=getFilrPathAndClasss(node)
         ntype=getType(node["name"])
         node["type"]=ntype
