@@ -15,12 +15,13 @@ T7=typing.TypeVar("T7")
 T8=typing.TypeVar("T8")
 
 Rect=tuple[int,int,int,int]
+Rect2d=tuple[float,float,float,float]
 uchar=str
 vec=Sequence[int]
 Vec4f=tuple[float,float,float,float]
 Vec6f=tuple[float,float,float,float,float,float]
 Point=tuple[int,int]
 Point2f=tuple[float,float]
-retval=typing.Any
 MatShape=Sequence[int]
+retval=typing.Any
 

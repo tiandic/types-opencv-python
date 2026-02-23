@@ -15,7 +15,9 @@ from pyflakes.reporter import Reporter
 
 TxmlDirPath="."
 scriptDIR=os.path.dirname(os.path.abspath(__file__))
-inheritRecordFilePath=f"{time.time()}_inherit.json"
+inheritRecordFilePath=f"{time.time()}_{os.getpid()}_inherit.json"
+knowTypes={}
+
 Krettypes={}
 indexxmlRoot=None
 
@@ -27,6 +29,7 @@ def isModule(name):
         return False
 
 def getFinallyObj(name,rootModule="cv2"):
+    # 将字符串解析为对象例如 "cv.ORB" 返回 cv.ORB
     paths = name.split(".")
     obj = importlib.import_module(rootModule)
     for p in paths:
@@ -56,9 +59,8 @@ def getOtherType(name):
         obj = getattr(obj, p)
     return type(obj)
 
-knowTypes={}
-
 def getType(name):
+    # 如果是 "module" "class" "func" 则返回他们的字符串,例如 "cv2" 会返回 "module" 其他类型则直接调用type()返回 例如 "cv2.SORT_EVERY_ROW"会返回 <class 'int'>
     global knowTypes
     ntype=None
     if name in knowTypes:
@@ -88,6 +90,7 @@ def isExist(name):
         return False
 
 def finddocfilefromxml(cppname):
+    # 根据传入的完全限定名 返回所有符合条件的refid, 即[refid, ....]
     root=indexxmlRoot
     nameIndex=cppname.rfind("::")
     classname=cppname[:nameIndex]
@@ -113,7 +116,8 @@ def gettypefromCXXtypes(CXXtypesTopylist,CXXtype):
             return key
     return None
 
-def cvtCXXToPYtype(CXXtpyestr0,tpyeisAnyListfile="CXXtypelist.txt",CXXtypesFile="CXXtypes.json"):
+def cvtCXXToPYtype(CXXtpyestr0,tpyeisAnyListfile=os.path.join(scriptDIR,"CXXtypelist.txt"),CXXtypesFile=os.path.join(scriptDIR,"CXXtypes.json")):
+    # 将c++类型转换为py的类型, 缺省值为 "typing.Any"
     CXXtypestr=CXXtpyestr0.removeprefix("const").rstrip("*").rstrip("&").strip()
     
     with open(tpyeisAnyListfile) as f:
@@ -210,6 +214,7 @@ def getFuncInfos(cppname,xmlDirPath):
 
 
 def getPySignList(rootPath):
+    # 获取当前py环境存在的cv2的所有类,函数,常量
     with open(os.path.join(rootPath, "modules/python_bindings_generator/pyopencv_signatures.json")) as f:
         j = json.loads(f.read())
     d = []
@@ -227,6 +232,7 @@ def getPySignList(rootPath):
 
 
 def cvtFuncJsonToPy(jSignDict):
+    # 返回对应的合法py函数定义语句
     ret = "def "
     ret += jSignDict["name"].split('.')[-1]
     strArg = jSignDict["arg"].replace(']', "")
@@ -255,16 +261,18 @@ def cvtFuncJsonToPy(jSignDict):
 
 
 def cvtClassJsonToPy(jSignDict):
+    # 返回对应的合法py类定义语句
     return f"class {jSignDict["name"].split('.')[-1]}"
 
-
 def cvtConstJsonTopy(jSignDict):
+    # 返回对应的合法py常量定义语句
     jtype = getOtherType(jSignDict["name"])
     ret = f"{jSignDict["name"]}:{jtype.__name__}=..."
     return ret
 
 
 def cvtJsonToPy(jSignDict):
+    # 返回对应的py定义语句
     if "ret" in jSignDict:
         return cvtFuncJsonToPy(jSignDict)
     elif "value" in jSignDict:
@@ -273,6 +281,9 @@ def cvtJsonToPy(jSignDict):
         return cvtClassJsonToPy(jSignDict)
 
 def TryCreateFile(filePath):
+    # 如果文件不存在则会创建路径上的目录与文件,如果存在,则不会对文件有任何影响
+    # 例如: a/b/c.txt 如果a/b/c.txt不存在 a/ b不存在时创建 a/b 目录 a/b/c.txt不存在则创建该文件,并写入base.pyi的内容
+    # 写入文件前调用这个函数,以确保文件存在
     if os.path.exists(filePath):
         return
     dirname=os.path.dirname(filePath)
@@ -288,6 +299,7 @@ def TryCreateFile(filePath):
     f.close()
 
 def writeclass(child,filePath):
+    # 向指定文件写入类定义
     TryCreateFile(filePath)
     l=child["name"].split(".")
     classl=child["classl"]
@@ -325,6 +337,7 @@ def writeclass(child,filePath):
     insertText(filePath,insertIndex+1,writeClassStr)
 
 def recordInherit(filePath,inherit,classname):
+    # 记录这些类的基类
     with open(inheritRecordFilePath,"r+") as f:
         content=f.read()
     j={}
@@ -336,18 +349,23 @@ def recordInherit(filePath,inherit,classname):
         j[filePath]={}
 
     if inherit not in j[filePath]:
-        j[filePath][inherit]=classname
+        j[filePath][inherit]=[]
+
+    if classname not in j[filePath][inherit]:
+        j[filePath][inherit].append(classname)
 
     jstr=json.dumps(j)
     with open(inheritRecordFilePath,'w') as f:
         f.write(jstr)
 
 def getInheritFilePath(name,outPath):
+    # 获取基类所在文件的路径,如果是 __init__.pyi 则是所在目录的路径
     name=name.removeprefix("cv2.")
     name=name.replace(".","/")
     return os.path.normpath(os.path.join(outPath,name))
 
 def cvtPathtoPyimport(key,classname):
+    # 转换为py的import语句
     if key==".":
         return f"from . import {classname}"
     elif set(list(key))==set(['/','.']) or key=="..":
@@ -357,6 +375,7 @@ def cvtPathtoPyimport(key,classname):
         print(f"warning: need add new cvtPathtoPyimport rules bacuse:  noknown key:{key} classname:{classname}")
 
 def insertText(filePath,index,text):
+    # 在文件的指定位置插入文本
     content=""
     TryCreateFile(filePath)
     with open(filePath) as f:
@@ -368,36 +387,40 @@ def insertText(filePath,index,text):
             f.write(content+text)
 
 def writeInherit(outPath):
+    # 将这些类的基类的import语句写入到文件头部部分
     with open(inheritRecordFilePath) as f:
         j=json.loads(f.read())
 
     for filePath in j:
-        
         with open(filePath) as f:
             index=f.read().find('\nT0=typing.TypeVar("T0")\n')+1
         
         for i in j[filePath]:
-            targetPath=""
-            if i == "cv2":
-                targetPath=outPath
-            else:
-                targetPath=getInheritFilePath(i,outPath)
-                if os.path.samefile(targetPath+".pyi",filePath):
-                    continue
-
-            filePath=os.path.normpath(filePath)
-            fdir=os.path.dirname(filePath)
-            relp=os.path.relpath(targetPath,fdir)
-            if relp=="." and filePath==os.path.join(outPath,"__init__.pyi"):
-                continue
-            Pyimport=cvtPathtoPyimport(relp,j[filePath][i])+"\n"
-            PyimportLen=len(Pyimport)
-            insertText(filePath,index,Pyimport)
-            index+=PyimportLen
+            for ii in j[filePath][i]:
+                targetPath=""
+                if i == "cv2":
+                    targetPath=outPath
+                else:
+                    targetPath=getInheritFilePath(i,outPath)
+                    if os.path.basename(targetPath)!="numpy" and os.path.samefile(targetPath+".pyi",filePath):
+                        continue
+                if os.path.basename(targetPath)!="numpy":
+                    filePath=os.path.normpath(filePath)
+                    fdir=os.path.dirname(filePath)
+                    relp=os.path.relpath(targetPath,fdir)
+                    if relp=="." and filePath==os.path.join(outPath,"__init__.pyi"):
+                        continue
+                    Pyimport=cvtPathtoPyimport(relp,ii)+"\n"
+                else:
+                    Pyimport="from numpy import ndarray as numpyndarray\n"
+                PyimportLen=len(Pyimport)
+                insertText(filePath,index,Pyimport)
+                index+=PyimportLen
 
         insertText(filePath,index,'\n')
 
 def getMostSimilar(child,params,infos):
+    # 获取函数文档时,可能有多个,通过这个函数可以获取其中与py中的函数最相符的文档
     paramsAndret=params+[i.strip() for i in child["ret"].split(",")]
     maxSimilarNum=0
     minNoSimilarNum=math.inf
@@ -442,6 +465,7 @@ def getMostSimilar(child,params,infos):
     return maxSimilarinfol[0]
 
 def getFuncInfo(child,params,xmlDirPath):
+    # 获取函数文档
     infos=getFuncInfos(child["cppname"],xmlDirPath)
     params=[i.rstrip("=...") for i in params]
     if len(infos)==1:
@@ -451,12 +475,16 @@ def getFuncInfo(child,params,xmlDirPath):
     return getMostSimilar(child,params,infos)
 
 def getIndexFromlist(l,item):
-    for i,v in enumerate(l):
-        if item==v:
-            return i
-    return -1
+    # 从一个 list 获取第一个匹配的值的下标
+    try:
+        return l.index(item)
+    except ValueError:
+        return -1
 
 def getHasHint(child,strTAB,xmlDirPath):
+    # 当函数有文档时,返回包含文档与类型提示的合法py函数定义语句
+    # 没有文档则返回不包含文档的合法py函数定义语句(如果有泛型则会包含泛型类型提示)
+
     global Krettypes
     pysign=cvtJsonToPy(child)
     params=pysign[pysign.find("(")+1:pysign.rfind(")")].split(",")
@@ -493,6 +521,18 @@ def getHasHint(child,strTAB,xmlDirPath):
     # 获取参数类型提示
     finallyParams=[]
 
+    # 有的参数在py中被作为返回
+    params2=[i.removesuffix("=...") for i in params]
+    for aarg in info["argInfo"]:
+        if (aarg in returnTypes) and (aarg not in params2):
+            counta=1
+            aarg2=aarg
+            while (aarg2 in Krettypes) and (Krettypes[aarg2]!=info["argInfo"][aarg]["type"]):
+                aarg2=f"{aarg}{counta}"
+                counta+=1
+            Krettypes[aarg2]=info["argInfo"][aarg]["type"]
+            returnTypes[getIndexFromlist(returnTypes,aarg)]=aarg2
+
     for param in params:
         paramName=param
         index=param.find('=')
@@ -519,11 +559,6 @@ def getHasHint(child,strTAB,xmlDirPath):
         
         finallyParams.append(f"{paramName}{hint}")
 
-    # 有的参数在py中被作为返回
-    for aarg in info["argInfo"]:
-        if (aarg in returnTypes) and (aarg not in params):
-            Krettypes[aarg]=info["argInfo"][aarg]["type"]
-    
     # 获取函数文档
     strTAB2=strTAB+oneTAB
     infodoc=info["doc"]
@@ -644,7 +679,9 @@ def handleLeaf(leaf,outPath,key):
     elif leaf["type"] != "module":
         print(f"noknow {key}:\n {leaf} ")
 
-def getFilrPathAndClasss(node):
+def getFilePathAndClasss(node):
+    # 获取node应该写在哪个文件 应该被哪个类包含在内
+    # 因为类有可能是嵌套的,所以classl是列表
     classl=[]
     filePath="."
     nodeli=node["name"].split('.')
@@ -668,6 +705,9 @@ def getFilrPathAndClasss(node):
     return filePath,classl
 
 def organise_pyi(targetPath):
+    # 整理pyi文件
+    # 如果存在文件名称(不包含扩展名)与同目录下的一个目录名称相同,则移动到同名目录下,更名为 __init__.pyi
+    # 在 __init__.pyi中写入同目录的所有模块的import语句
     for root,dirs,files in os.walk(targetPath):
         now_dir_name=os.path.basename(root)
         if "__init__.pyi" not in files:
@@ -692,14 +732,13 @@ def handlen(node,outPath):
     handleLeaf(node,outPath,node["name"].split('.')[-1])
 
 def swapn(newdclass,n1,n2):
-    newdclass2=newdclass
-    v1=newdclass[n1]
-    v2=newdclass[n2]
-    newdclass2[n1]=v2
-    newdclass2[n2]=v1
+    # 交换列表中的两个值的位置
+    newdclass2=newdclass.copy()
+    newdclass2[n1], newdclass2[n2]=newdclass[n2], newdclass[n1]
     return newdclass2
 
 def findclassIndex(newdclass,name):
+    # 根据 name 返回下标
     name2='.'+name
     for i,item in enumerate(newdclass):
         itemname=item["name"]
@@ -707,6 +746,7 @@ def findclassIndex(newdclass,name):
             return i
 
 def sortclass(newdclass):
+    # 为类的写入顺序进行排序
     newdclass2=newdclass
     neednext=True
     while neednext:
@@ -723,6 +763,10 @@ def sortclass(newdclass):
                     continue
                 for classname in newdclass2[l[key]][key]:
                     index=findclassIndex(newdclass2,classname)
+                    if index==None:
+                        if newdclass2[l[key]][key] == ['ndarray']:
+                            newdclass2[l[key]][key]=["numpyndarray"]
+                        continue
                     if index<n:
                         continue
                     newdclass2=swapn(newdclass2,index,n)
@@ -732,6 +776,8 @@ def sortclass(newdclass):
     return newdclass2
 
 def sortnewd(newd):
+    # 排序
+    # 常量在最前写入, 然后是类,最后是函数
     newdconst=[]
     newdclass=[]
     newdfunc =[]
@@ -747,13 +793,15 @@ def sortnewd(newd):
     return newdconst + newdclass + newdfunc
 
 def removeDup(newd):
+    # 删除列表中的重复项
     newd2=[]
     for i in newd:
         if i not in newd2:
             newd2.append(i)
     return newd2
 
-def getretType2(CXXtype,CXXtypesFile="CXXtypes.json"):
+def getretType2(CXXtype,CXXtypesFile=os.path.join(scriptDIR,"CXXtypes.json")):
+    # 将对应的c++函数的返回值转换为py类型
     CXXtypestr=CXXtype.removeprefix("const").rstrip("*").rstrip("&").strip()
     with open(CXXtypesFile) as f:
         CXXtypesTopylist=json.loads(f.read())
@@ -773,14 +821,23 @@ def getretType2(CXXtype,CXXtypesFile="CXXtypes.json"):
         return "typing.Any"
 
 def isclassFromxml(name):
+    # 通过xml文档判断是否为一个类
     root=indexxmlRoot
     l1=[i for i in root.xpath(f"compound/name[contains(text(),'::{name}')]") if i.text and i.text.endswith("::"+name)]
     if len(l1)>0:
         return True
     return False
  
+def getretHasClass(NretType):
+    lns=["KeyPoint","cv::RotatedRect","DMatch"]
+    for i in lns:
+        if i in NretType:
+            return i
+    return None
+
 
 def addNoknownType(outPath):
+    # 将最后函数返回类型提示中, 未定义的类型进行定义
     warnings.filterwarnings("ignore", category=SyntaxWarning)
     for root,_,files in os.walk(outPath):
         for file in files:
@@ -817,17 +874,23 @@ def addNoknownType(outPath):
                 else:
                     text=f"{i}=typing.Any"
                 
-                if "cv::RotatedRect" in text:
+                retHasClass=getretHasClass(text)
+                if retHasClass!=None:
                     relp=os.path.relpath(outPath,root)
                     if not (relp=="." and os.path.samefile(os.path.join(root,file),os.path.join(outPath,"__init__.pyi"))):
                         text=text.replace("cv::","")
-                        Pyimport=cvtPathtoPyimport(relp,"RotatedRect")+"\n"
+                        Pyimport=cvtPathtoPyimport(relp,retHasClass.replace("cv::",""))+"\n"
                         text=Pyimport+text
-
-
+                if "Pose3DPtr" in text:
+                    text=text.replace("Pose3DPtr","Pose3D")
+                if "numpy.ndarray" in text:
+                    text=text.replace("<class 'numpy.ndarray'>","numpyndarray")
+                    text="from numpy import ndarray as numpyndarray\n"+text
+                text=text.replace("cv::Rect","Rect")
                 f.write(f"\n{text}")
 
 def findchilds(name,newd):
+    # 根据 name 返回对应的childs
     childs=[]
     for i in newd:
         if i["name"]==name:
@@ -835,6 +898,7 @@ def findchilds(name,newd):
     return childs
 
 def getBaseClasss(classname):
+    # 获取函数的基类
     finobjs=getFinallyObj(classname).__bases__
 
     if (len(finobjs)==1 and finobjs[0]!=object) or (len(finobjs)>1):
@@ -843,9 +907,10 @@ def getBaseClasss(classname):
     return []
 
 def addMoreInfoTonewd(newd):
+    # 为列表中的每个项添加更多的属性
     newd2=newd
     for n,node in enumerate(newd):
-        filePath,classl=getFilrPathAndClasss(node)
+        filePath,classl=getFilePathAndClasss(node)
         ntype=getType(node["name"])
         node["type"]=ntype
         node["filePath"]=filePath
@@ -868,6 +933,7 @@ def addMoreInfoTonewd(newd):
     return newd2
 
 def applyPatch(newd):
+    # 应用补丁
     newd2=[]
     patchPath=os.path.join(scriptDIR,"patch.json")
     with open(patchPath) as f:
@@ -878,8 +944,20 @@ def applyPatch(newd):
         if childs!=[]:
             retChild=retChild|childs[0]
         newd2.append(retChild)
+    patchPath2=os.path.join(scriptDIR,"patch2.json")
+    with open(patchPath2) as f:
+        j=json.loads(f.read())
 
-    return newd2
+    return newd2+j
+cache_file="cache.pkl"
+import pickle
+def writenewdCache(newd):
+    with open(cache_file,"wb") as f:
+        pickle.dump(newd,f)
+
+def readnewdCache():
+    with open(cache_file,"rb") as f:
+        return pickle.load(f)
 
 def main():
     global TxmlDirPath,indexxmlRoot
@@ -893,10 +971,12 @@ def main():
     open(inheritRecordFilePath,"w").close()
     print("Organising input ...")
     newd = getPySignList(rootPath)
+    newd = applyPatch(newd)
     newd = removeDup(newd)
     newd = addMoreInfoTonewd(newd)
     newd = sortnewd(newd)
-    newd = applyPatch(newd)
+    # newd=readnewdCache()
+    writenewdCache(newd)
     
     print("All sorted!\nstart write file...\nThis part of the time may be a bit long, please be patient...")
     for i in newd:
