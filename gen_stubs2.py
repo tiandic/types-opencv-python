@@ -37,26 +37,17 @@ def isModule(name):
         return False
 
 def isClass(name):
-    paths = name.split(".")
-    obj = importlib.import_module("cv2")
-    for p in paths:
-        obj = getattr(obj, p)
+    obj = getFinallyObj(name)
     return inspect.isclass(obj)
 
 
 def isFunc(name):
-    paths = name.split(".")
-    obj = importlib.import_module("cv2")
-    for p in paths:
-        obj = getattr(obj, p)
+    obj = getFinallyObj(name)
     return callable(obj)
 
 
 def getOtherType(name):
-    paths = name.split(".")
-    obj = importlib.import_module("cv2")
-    for p in paths:
-        obj = getattr(obj, p)
+    obj = getFinallyObj(name)
     return type(obj)
 
 def getType(name):
@@ -81,11 +72,8 @@ def getType(name):
 
 def isExist(name):
     # 判断该属性在cv2中是否存在
-    paths = name.split(".")
-    obj = importlib.import_module("cv2")
     try:
-        for p in paths:
-            obj = getattr(obj, p)
+        getFinallyObj(name)
         return True
     except:
         return False
