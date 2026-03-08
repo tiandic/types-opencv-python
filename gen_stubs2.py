@@ -9,24 +9,17 @@ import shutil
 import inspect
 import warnings
 import importlib
-from lxml import etree
+from lxml import etree # type: ignore
 from pyflakes.api import checkPath
 from pyflakes.reporter import Reporter
 
 TxmlDirPath="."
 scriptDIR=os.path.dirname(os.path.abspath(__file__))
 inheritRecordFilePath=f"{time.time()}_{os.getpid()}_inherit.json"
-knowTypes={}
+knowTypes={} # 为 getType 函数 缓存
 
-Krettypes={}
+Krettypes={} # 记录参数(这些参数在C++中被作为参数传入,但在py中被作为返回输出)对应的类型,在检查未知返回类型时,会将这些参数定义为正确的类型
 indexxmlRoot=None
-
-def isModule(name):
-    try:
-        obj=getFinallyObj(name)
-        return inspect.ismodule(obj)
-    except:
-        return False
 
 def getFinallyObj(name,rootModule="cv2"):
     # 将字符串解析为对象例如 "cv.ORB" 返回 cv.ORB
@@ -35,6 +28,13 @@ def getFinallyObj(name,rootModule="cv2"):
     for p in paths:
         obj = getattr(obj, p)
     return obj
+
+def isModule(name):
+    try:
+        obj=getFinallyObj(name)
+        return inspect.ismodule(obj)
+    except:
+        return False
 
 def isClass(name):
     paths = name.split(".")
@@ -80,6 +80,7 @@ def getType(name):
 
 
 def isExist(name):
+    # 判断该属性在cv2中是否存在
     paths = name.split(".")
     obj = importlib.import_module("cv2")
     try:
@@ -91,15 +92,19 @@ def isExist(name):
 
 def finddocfilefromxml(cppname):
     # 根据传入的完全限定名 返回所有符合条件的refid, 即[refid, ....]
+    # 该函数只被用于在index.xml寻找对应函数id
     root=indexxmlRoot
     nameIndex=cppname.rfind("::")
     classname=cppname[:nameIndex]
-    l1=root.xpath(f"compound/name[text()='{classname}']")
+    l1=root.xpath(f"compound/name[text()='{classname}']") # type: ignore
     if len(l1)==1:
+        # 正常情况应只有一个对应的字段
         compoundTag=l1[0].getparent()
         targetIDs=[]
         targetName=cppname[nameIndex+2:].replace(" ","")
+        # 获取该函数的所有id
         memberNames = compoundTag.xpath(f"member/name[text()='{targetName}']")
+        # 函数可能会重载,所以可能会有多个id
         for memberName in memberNames:
             targetIDs.append(memberName.getparent().get("refid"))
 
@@ -111,6 +116,7 @@ def finddocfilefromxml(cppname):
         return None
 
 def gettypefromCXXtypes(CXXtypesTopylist,CXXtype):
+    # CXXtypesTopylist是一个被人工编写的,确定某个c++类型应该转换为对应的py类型的json
     for key in CXXtypesTopylist:
         if CXXtype in CXXtypesTopylist[key]:
             return key
@@ -118,6 +124,8 @@ def gettypefromCXXtypes(CXXtypesTopylist,CXXtype):
 
 def cvtCXXToPYtype(CXXtpyestr0,tpyeisAnyListfile=os.path.join(scriptDIR,"CXXtypelist.txt"),CXXtypesFile=os.path.join(scriptDIR,"CXXtypes.json")):
     # 将c++类型转换为py的类型, 缺省值为 "typing.Any"
+    
+    #  去除在c++类型与py类型对应中可有可无的前缀与后缀,例如: const String  与 String 实际上都是对应py中的str,所以 const 可有可无,去除 const
     CXXtypestr=CXXtpyestr0.removeprefix("const").rstrip("*").rstrip("&").strip()
     
     with open(tpyeisAnyListfile) as f:
@@ -128,8 +136,10 @@ def cvtCXXToPYtype(CXXtpyestr0,tpyeisAnyListfile=os.path.join(scriptDIR,"CXXtype
 
     t=gettypefromCXXtypes(CXXtypesTopylist,CXXtypestr)
     if t!=None:
+        # 已有确定的转换关系则直接返回转换好的py类型
         return t
     elif CXXtpyestr0 in tpyeisAnyList:
+        #  tpyeisAnyList 是一个包含一些c++类型的列表,这些类型由于有些复杂,暂时被转换为 py 中的 Any 类型
         return "typing.Any"
     else:
         print(f"warning: noknown type: {CXXtypestr}")
@@ -152,21 +162,24 @@ def getFuncInfos(cppname,xmlDirPath):
             {...}
         ]
     """
+    # 获取函数的id
     refids=finddocfilefromxml(cppname)
     retOverLoad=False
 
     if refids==None:
+        # 没有这个函数的相关文档
         return []
     if len(refids)>1:
         retOverLoad=True
 
-    rets=[]
+    rets=[] # 函数可能会重载,所以会返回多个文档
     for refid in refids:
         ret={
                 "overload":retOverLoad,
                 "static":False,
                 "argInfo":{}
                 }
+        # refid包含了该函数文档所在文件的路径,所以直接拼接即可
         targetXmlFilePath=os.path.join(xmlDirPath,refid[:refid.rfind("_")])+".xml"
         tree=etree.parse(targetXmlFilePath)
         root=tree.getroot()
@@ -174,27 +187,34 @@ def getFuncInfos(cppname,xmlDirPath):
         memberdefs=root.xpath(f"compounddef/sectiondef/memberdef[@id='{refid}' and @prot='public']")
         if memberdefs==[]:
             continue
-        memberdef=memberdefs[0]
+        memberdef=memberdefs[0] # refid是唯一的,所以memberdefs 长度应为1 直接使用[0]即可
 
+        # 获取函数返回类型
         retType=''.join(memberdef.xpath("type")[0].itertext())
         ret["retType"]=retType.strip()
-
+        
+        # 获取函数是否为静态函数
         if memberdef.get("static")=="yes":
             ret["static"]=True
 
+        # 获取参数的文档与类型
         for param in memberdef.xpath("param"):
             count=0
+            # 默认参数名,有些C++函数的签名只有类型,没有参数名,在文档的py部分它们就会被写成 arg{count} 的形式
             paramName=f"arg{count}"
             while paramName in ret["argInfo"]:
                 count+=1
                 paramName=f"arg{count}"
-
+            
+            # 尝试获取对应的参数名
             decnames=param.xpath("declname")
             if decnames!=[]:
                 paramName=''.join(decnames[0].itertext())
+            # 获取参数类型
             paramType=''.join(param.xpath("type")[0].itertext())
             parameternameTags = memberdef.xpath(f"detaileddescription/para/parameterlist/parameteritem/parameternamelist/parametername[text()='{paramName}']")
             
+            # 获取参数文档
             paramDoc=""
             if parameternameTags!=[]:
                 paramDocTags=parameternameTags[0].getparent().getparent().xpath("parameterdescription/para")
@@ -203,11 +223,13 @@ def getFuncInfos(cppname,xmlDirPath):
 
             ret["argInfo"][paramName]={"type":paramType,"doc":paramDoc}
 
+        # 获取函数的文档
         doc=""
         briefparaTags=memberdef.xpath("briefdescription/para")
         if briefparaTags!=[]:
             doc=''.join(briefparaTags[0].itertext())
         ret["doc"]=doc
+
         rets.append(ret)
 
     return rets
@@ -215,6 +237,7 @@ def getFuncInfos(cppname,xmlDirPath):
 
 def getPySignList(rootPath):
     # 获取当前py环境存在的cv2的所有类,函数,常量
+    # 会重新调整json的布局
     with open(os.path.join(rootPath, "modules/python_bindings_generator/pyopencv_signatures.json")) as f:
         j = json.loads(f.read())
     d = []
@@ -308,6 +331,7 @@ def writeclass(child,filePath):
     with open(filePath) as f:
         content=f.read()
     if classl!=[]:
+        # classl 是该类的定义被哪些类包含在内,即被哪些类嵌套在其内部(不是基类)
         strTAB=' '*4*len(classl)
         for tclassName in classl:
             insertIndex=content.find(f"class {tclassName}",insertIndex)
@@ -320,24 +344,28 @@ def writeclass(child,filePath):
         insertIndex=len(content)
 
     writeClassStr=strTAB
+
+    # 获取类的名称
     if l!=[]:
         writeClassStr+=f"class {l[-1]}"
     else:
         writeClassStr+=f"class {child['name']}"
 
+    # 获取基类
     finobjs=getFinallyObj(child["name"]).__bases__
-
     finobjNames=child["baseClassl"]
     if finobjNames!=[]:
         for i in finobjs:
             recordInherit(filePath,i.__module__,i.__name__)
         writeClassStr+=f"({','.join(finobjNames)})"
-
+    
+    # 使用 ... 占位,暂时定为空类
     writeClassStr+=": ...\n"
     insertText(filePath,insertIndex+1,writeClassStr)
 
 def recordInherit(filePath,inherit,classname):
     # 记录这些类的基类
+    # 在当前目录生成一个临时的 json 用以记录
     with open(inheritRecordFilePath,"r+") as f:
         content=f.read()
     j={}
@@ -410,7 +438,7 @@ def writeInherit(outPath):
                     relp=os.path.relpath(targetPath,fdir)
                     if relp=="." and filePath==os.path.join(outPath,"__init__.pyi"):
                         continue
-                    Pyimport=cvtPathtoPyimport(relp,ii)+"\n"
+                    Pyimport=cvtPathtoPyimport(relp,ii)+"\n" # type: ignore
                 else:
                     Pyimport="from numpy import ndarray as numpyndarray\n"
                 PyimportLen=len(Pyimport)
@@ -431,34 +459,43 @@ def getMostSimilar(child,params,infos):
         similarNum=0
         nosimilarNum=0
         for CXXparam in info["argInfo"]:
+            # 通过参数的名称与数量来计算相似度
             if CXXparam in paramsAndret:
                 similarNum+=1
             else:
                 nosimilarNum+=1
 
+        # 第一次筛选
+        # 更新最相似的 到 maxSimilarinfol
         if similarNum>maxSimilarNum:
             maxSimilarNum=similarNum
             maxSimilarinfol=[info]
         elif similarNum==maxSimilarNum:
             maxSimilarinfol.append(info)
-
+        
+        # 第二次筛选,更新不相似列表中,最相似那个
         if nosimilarNum<minNoSimilarNum:
             minNoSimilarNum=nosimilarNum
             minNoSimilarinfol=[info]
         elif nosimilarNum==minNoSimilarNum:
             minNoSimilarinfol.append(info)
-
+        
+        # 第三次筛选,如果该py函数返回 None 那么应该对应C++中的 void
         if info["retType"]=="void":
             isvoidFuncs.append(info)
 
     if len(maxSimilarinfol)==1:
+        # 第一次筛选时,已经找到了对应文档
         return maxSimilarinfol[0]
     if child["ret"]=="None" and len(isvoidFuncs)==1:
+        # 第三次筛选
         return isvoidFuncs[0]
 
     if len(minNoSimilarinfol)==1:
         return minNoSimilarinfol[0]
-
+    
+    # 通过 第一次与第二次 筛选获得的列表,找出其中重叠的部分
+    # 到了这里,如果依旧找到多个最相符的文档,即使人工根据输入查找也无法区分(已在2026.2人工验证)
     overlap= [i for i in maxSimilarinfol if i in minNoSimilarinfol]
     if len(overlap)!=0:
         return overlap[0]
@@ -497,6 +534,7 @@ def getHasHint(child,strTAB,xmlDirPath):
     Tcount=0
 
     if info=={}:
+        # 没有文档
         finallyParams=[]
         # 添加泛型的返回类型提示
         for param in params:
@@ -516,6 +554,7 @@ def getHasHint(child,strTAB,xmlDirPath):
         returnHint=','.join(returnTypes)
         if len(returnTypes)>1:
             returnHint="tuple["+returnHint+"]"
+
         return strTAB+f"def {pyFuncName}({','.join(finallyParams)}) -> {returnHint}: ..."
 
     # 获取参数类型提示
@@ -533,6 +572,7 @@ def getHasHint(child,strTAB,xmlDirPath):
             Krettypes[aarg2]=info["argInfo"][aarg]["type"]
             returnTypes[getIndexFromlist(returnTypes,aarg)]=aarg2
 
+    # py 签名中,参数部分
     for param in params:
         paramName=param
         index=param.find('=')
@@ -560,6 +600,7 @@ def getHasHint(child,strTAB,xmlDirPath):
         finallyParams.append(f"{paramName}{hint}")
 
     # 获取函数文档
+    # 格式化文档
     strTAB2=strTAB+oneTAB
     infodoc=info["doc"]
     if infodoc!="":
@@ -592,12 +633,15 @@ def getHasHint(child,strTAB,xmlDirPath):
 
     if FuncDoc.replace("\n","").replace(" ","").replace('`',"").strip() == '""""""':
         FuncDoc=strTAB2+'""""""'
-
+    
+    # 返回的类型提示
     returnHint=','.join(returnTypes)
     if len(returnTypes)>1:
         returnHint="tuple["+returnHint+"]"
     
     finallyFuncSign=f"def {pyFuncName}({','.join(finallyParams)}) -> {returnHint}:"
+
+    # 添加静态函数与重载函数的标记
     if info["static"]:
         finallyFuncSign="@staticmethod\n"+strTAB+finallyFuncSign
     if child["overload"]:
@@ -619,25 +663,30 @@ def removeFileStr(filePath,startIndex,endIndex):
 def writeFunc(child,filePath,classl):
     strTAB=""
     if classl!=[]:
+        # 如果该函数在某个类的内部
         strTAB=' '*4*len(classl)
         insertIndex=0
         
         with open(filePath) as f:
             content=f.read()
+            # 寻找合适的插入位置
             insertIndex=0
             for tclassName in classl:
                 insertIndex=content.find(f"class {tclassName}",insertIndex)
             insertIndex=insertIndex+1+content[insertIndex+1:].find('\n')
             elipIndex=content.rfind(" ...",insertIndex-5,insertIndex)
         if elipIndex!=-1:
+            # 该函数所在类因为该函数的插入已经不为空了,所以删除 该类的 ...
             removeFileStr(filePath,elipIndex,elipIndex+3)
             insertIndex-=4
+        # 构建插入的函数签名
         text=getHasHint(child,strTAB,TxmlDirPath)
         index=text.find("(")+1
         if "@staticmethod" not in text and index!=text.find(")"):
             text=text[:index]+"self,"+text[index:]
         elif "@staticmethod" not in text:
             text=text[:index]+"self"+text[index:]
+        # 插入
         insertText(filePath,insertIndex+1,f"{text}\n\n")
     else:
         TryCreateFile(filePath)
@@ -708,7 +757,7 @@ def organise_pyi(targetPath):
     # 整理pyi文件
     # 如果存在文件名称(不包含扩展名)与同目录下的一个目录名称相同,则移动到同名目录下,更名为 __init__.pyi
     # 在 __init__.pyi中写入同目录的所有模块的import语句
-    for root,dirs,files in os.walk(targetPath):
+    for root,_,files in os.walk(targetPath):
         now_dir_name=os.path.basename(root)
         if "__init__.pyi" not in files:
             srcPath =os.path.join(root,f"../{now_dir_name}.pyi")
@@ -823,7 +872,7 @@ def getretType2(CXXtype,CXXtypesFile=os.path.join(scriptDIR,"CXXtypes.json")):
 def isclassFromxml(name):
     # 通过xml文档判断是否为一个类
     root=indexxmlRoot
-    l1=[i for i in root.xpath(f"compound/name[contains(text(),'::{name}')]") if i.text and i.text.endswith("::"+name)]
+    l1=[i for i in root.xpath(f"compound/name[contains(text(),'::{name}')]") if i.text and i.text.endswith("::"+name)] # type: ignore
     if len(l1)>0:
         return True
     return False
@@ -841,6 +890,7 @@ def addNoknownType(outPath):
     warnings.filterwarnings("ignore", category=SyntaxWarning)
     for root,_,files in os.walk(outPath):
         for file in files:
+            # 使用检查器,获取文件中未定义的类型
             output=io.StringIO()
             reporter=Reporter(output,output)
             if not file.endswith(".pyi"):
@@ -857,6 +907,7 @@ def addNoknownType(outPath):
             noknownTypel=list(set(noknownTypel))
             f=open(os.path.join(root,file),'a')
             f.write("\n")
+            # 处理每个未定义类型
             for i in noknownTypel:
                 if i=="Mat":
                     relp=os.path.relpath(outPath,root)
@@ -878,7 +929,7 @@ def addNoknownType(outPath):
                 if retHasClass!=None:
                     relp=os.path.relpath(outPath,root)
                     if not (relp=="." and os.path.samefile(os.path.join(root,file),os.path.join(outPath,"__init__.pyi"))):
-                        text=text.replace("cv::","")
+                        text=text.replace("cv::","") # type: ignore
                         Pyimport=cvtPathtoPyimport(relp,retHasClass.replace("cv::",""))+"\n"
                         text=Pyimport+text
                 if "Pose3DPtr" in text:
@@ -908,7 +959,7 @@ def getBaseClasss(classname):
 
 def addMoreInfoTonewd(newd):
     # 为列表中的每个项添加更多的属性
-    newd2=newd
+    newd2=newd.copy()
     for n,node in enumerate(newd):
         filePath,classl=getFilePathAndClasss(node)
         ntype=getType(node["name"])
@@ -949,15 +1000,6 @@ def applyPatch(newd):
         j=json.loads(f.read())
 
     return newd2+j
-cache_file="cache.pkl"
-import pickle
-def writenewdCache(newd):
-    with open(cache_file,"wb") as f:
-        pickle.dump(newd,f)
-
-def readnewdCache():
-    with open(cache_file,"rb") as f:
-        return pickle.load(f)
 
 def main():
     global TxmlDirPath,indexxmlRoot
@@ -975,8 +1017,6 @@ def main():
     newd = removeDup(newd)
     newd = addMoreInfoTonewd(newd)
     newd = sortnewd(newd)
-    # newd=readnewdCache()
-    writenewdCache(newd)
     
     print("All sorted!\nstart write file...\nThis part of the time may be a bit long, please be patient...")
     for i in newd:
