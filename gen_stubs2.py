@@ -181,7 +181,10 @@ def getFuncInfos(cppname,xmlDirPath):
                 }
         # refid包含了该函数文档所在文件的路径,所以直接拼接即可
         targetXmlFilePath=os.path.join(xmlDirPath,refid[:refid.rfind("_")])+".xml"
-        tree=etree.parse(targetXmlFilePath)
+        try:
+            tree=etree.parse(targetXmlFilePath)
+        except:
+            print(f"File {targetXmlFilePath} parsing error, please check whether you are using doxygen 1.16.1 or a newer version, and delete the generated sutbs.")
         root=tree.getroot()
 
         memberdefs=root.xpath(f"compounddef/sectiondef/memberdef[@id='{refid}' and @prot='public']")
@@ -1007,7 +1010,10 @@ def main():
     outPath = sys.argv[2]
     cv2_stubsPath=os.path.join(outPath,"cv2")
     TxmlDirPath=os.path.join(rootPath,"doc/doxygen/xml")
-    tree=etree.parse(os.path.join(TxmlDirPath,"index.xml"))
+    try:
+        tree=etree.parse(os.path.join(TxmlDirPath,"index.xml"))
+    except:
+        print(f"File {os.path.join(TxmlDirPath,"index.xml")} parsing error, please check whether you are using doxygen 1.16.1 or a newer version, and delete the generated sutbs.")
     indexxmlRoot=tree.getroot()
  
     open(inheritRecordFilePath,"w").close()
