@@ -14,6 +14,7 @@ from pyflakes.api import checkPath
 from pyflakes.reporter import Reporter
 
 TxmlDirPath="."
+cv2ModulePath="cv2"
 scriptDIR=os.path.dirname(os.path.abspath(__file__))
 inheritRecordFilePath=f"{time.time()}_{os.getpid()}_inherit.json"
 knowTypes={} # 为 getType 函数 缓存
@@ -21,8 +22,9 @@ knowTypes={} # 为 getType 函数 缓存
 Krettypes={} # 记录参数(这些参数在C++中被作为参数传入,但在py中被作为返回输出)对应的类型,在检查未知返回类型时,会将这些参数定义为正确的类型
 indexxmlRoot=None
 
-def getFinallyObj(name,rootModule="cv2"):
+def getFinallyObj(name):
     # 将字符串解析为对象例如 "cv.ORB" 返回 cv.ORB
+    rootModule=cv2ModulePath
     paths = name.split(".")
     obj = importlib.import_module(rootModule)
     for p in paths:
@@ -993,15 +995,20 @@ def applyPatch(newd):
     return newd2+j
 
 def main():
-    global TxmlDirPath,indexxmlRoot
+    global TxmlDirPath,indexxmlRoot,cv2ModulePath
     rootPath = sys.argv[1]
     outPath = sys.argv[2]
+    if len(sys.argv)>2:
+        cv2ModulePath=sys.argv[3]
     cv2_stubsPath=os.path.join(outPath,"cv2")
     TxmlDirPath=os.path.join(rootPath,"doc/doxygen/xml")
+    indexXmlFilePath=os.path.join(TxmlDirPath,"index.xml")
+    if (os.path.exists(indexXmlFilePath)):
+        print(f"The file {indexXmlFilePath} does not exist! Please check if the XML document has been generated!")
     try:
-        tree=etree.parse(os.path.join(TxmlDirPath,"index.xml"))
+        tree=etree.parse(indexXmlFilePath)
     except:
-        print(f"File {os.path.join(TxmlDirPath,"index.xml")} parsing error, please check whether you are using doxygen 1.16.1 or a newer version, and delete the generated sutbs.")
+        print(f"File {indexXmlFilePath} parsing error, please check whether you are using doxygen 1.16.1 or a newer version, and delete the generated sutbs.")
     indexxmlRoot=tree.getroot()
  
     open(inheritRecordFilePath,"w").close()
