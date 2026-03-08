@@ -2,7 +2,7 @@
 
 This is an OpenCV stubs project.
 
-Generated based on `pyopencv_signatures.json` from OpenCV documentation build, together with the XML documents generated after the build, my local Python environment, and my patches.
+Based on the `pyopencv_signatures.json` generated from building the OpenCV documentation, as well as the XML documentation generated after building, the local Python environment for running this project, and my patch generation.
 
 Because the generated stubs are based on the OpenCV documentation, all classes, functions, function documentation, and constants included in the OpenCV documentation will be included.
 
