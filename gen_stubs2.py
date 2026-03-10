@@ -998,12 +998,12 @@ def main():
     global TxmlDirPath,indexxmlRoot,cv2ModulePath
     rootPath = sys.argv[1]
     outPath = sys.argv[2]
-    if len(sys.argv)>2:
-        cv2ModulePath=sys.argv[3]
+    if len(sys.argv)>3:
+        sys.path.insert(0,sys.argv[3])
     cv2_stubsPath=os.path.join(outPath,"cv2")
     TxmlDirPath=os.path.join(rootPath,"doc/doxygen/xml")
     indexXmlFilePath=os.path.join(TxmlDirPath,"index.xml")
-    if (os.path.exists(indexXmlFilePath)):
+    if (not os.path.exists(indexXmlFilePath)):
         print(f"The file {indexXmlFilePath} does not exist! Please check if the XML document has been generated!")
     try:
         tree=etree.parse(indexXmlFilePath)
