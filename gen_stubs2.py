@@ -246,6 +246,8 @@ def getPySignList(rootPath):
             newd.append(i)
     return newd
 
+def filterNotExist(newd):
+    return [i for i in newd if isExist(i["name"])]
 
 def cvtFuncJsonToPy(jSignDict):
     # 返回对应的合法py函数定义语句
@@ -1015,6 +1017,7 @@ def main():
     print("Organising input ...")
     newd = getPySignList(rootPath)
     newd = applyPatch(newd)
+    newd = filterNotExist(newd)
     newd = removeDup(newd)
     newd = addMoreInfoTonewd(newd)
     newd = sortnewd(newd)
