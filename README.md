@@ -68,6 +68,8 @@ cd types-opencv-python
 python3 gen_stubs2.py .. genout # The first parameter is the build directory of the opencv documentation, and the second parameter is the stubs output directory
 ```
 
+In addition, if you need to generate stubs based on a `cv*.so` at a specified path instead of the cv2 installed in the current Python environment, you can specify the third parameter as the directory where the `cv*.so` is located. For example, if the specified `cv*.so` is `/a/b/c/cv2.abi3.so`, then the third parameter should be `/a/b/c`.
+
 The stubs generated in genout
 You can use the following command to install
 ```bash
