@@ -6,6 +6,8 @@ Based on the `pyopencv_signatures.json` generated from building the OpenCV docum
 
 Because the generated stubs are based on the OpenCV documentation, all classes, functions, function documentation, and constants included in the OpenCV documentation will be included.
 
+The official OpenCV stubs are generated for the new version and do not include functions with `_create` (for example: `cv2.ORB_create`), but these functions still exist in the documentation and can still be used. This project includes these functions.
+
 However, there are still shortcomings, the main one being the type hints for function return values.
 
 This is due to the large number of placeholder types `retval` in the Python sections of the OpenCV documentation.
